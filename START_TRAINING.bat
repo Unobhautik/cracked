@@ -1,31 +1,31 @@
 @echo off
-echo ========================================
-echo Medical AI Model Training - Windows
-echo ========================================
+echo ============================================================
+echo Medical AI Model Training - Complete Pipeline
+echo ============================================================
 echo.
-
-echo Step 1: Setting up directories...
-python training/setup_training.py
+echo This will run the complete training pipeline:
+echo 1. Check dependencies
+echo 2. Collect medical data
+echo 3. Process data
+echo 4. Convert to training format
+echo 5. Train the model
 echo.
-
-echo Step 2: Installing dependencies...
-pip install -r training/requirements_training.txt
+echo NOTE: If you have limited resources (CPU or low GPU memory),
+echo       the script will automatically use CPU-optimized training.
 echo.
-
-echo Step 3: Starting data collection and training pipeline...
-echo This will automatically download all datasets - no manual work needed!
+echo This may take several hours. You can stop with Ctrl+C.
 echo.
-python training/run_training_pipeline.py
-echo.
-
-echo Step 4: Training model...
-echo This may take 2-6 hours depending on your GPU.
-echo.
-python training/train_model.py --model mistralai/Mistral-7B-v0.1 --use-qlora --epochs 3
-echo.
-
-echo ========================================
-echo Training Complete!
-echo ========================================
 pause
 
+python training/run_complete_training.py
+
+if errorlevel 1 (
+    echo.
+    echo ============================================================
+    echo Training failed. Trying fast training version...
+    echo ============================================================
+    echo.
+    python training/train_model_fast.py
+)
+
+pause

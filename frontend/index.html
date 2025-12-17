@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentMed - Intelligent Healthcare Assistant</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo-icon">
+                        <i class="fas fa-heartbeat"></i>
+                    </div>
+                    <div>
+                        <h1 class="logo-title">AgentMed</h1>
+                        <p class="logo-subtitle">Your Intelligent Healthcare Assistant</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <div class="status-indicator" id="statusIndicator">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Connecting...</span>
+                    </div>
+                    <button class="header-btn" id="clearChatBtn" title="Clear Chat">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                    <button class="header-btn" id="settingsBtn" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2>Quick Actions</h2>
+                    <button class="sidebar-toggle" id="sidebarToggle">
+                        <i class="fas fa-chevron-left"></i>
+                    </button>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="quick-actions">
+                        <button class="action-btn" data-action="symptom" data-icon="🔍">
+                            <span class="action-icon">🔍</span>
+                            <span class="action-text">Analyze Symptoms</span>
+                        </button>
+                        <button class="action-btn" data-action="drug" data-icon="💊">
+                            <span class="action-icon">💊</span>
+                            <span class="action-text">Drug Information</span>
+                        </button>
+                        <button class="action-btn" data-action="book" data-icon="📅">
+                            <span class="action-icon">📅</span>
+                            <span class="action-text">Book Appointment</span>
+                        </button>
+                        <button class="action-btn" data-action="tips" data-icon="💡">
+                            <span class="action-icon">💡</span>
+                            <span class="action-text">Health Tips</span>
+                        </button>
+                        <button class="action-btn" data-action="reminder" data-icon="⏰">
+                            <span class="action-icon">⏰</span>
+                            <span class="action-text">Medication Reminder</span>
+                        </button>
+                        <button class="action-btn" data-action="pdf" data-icon="📄">
+                            <span class="action-icon">📄</span>
+                            <span class="action-text">Analyze PDF</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Available Agents</h3>
+                    <div class="agents-list" id="agentsList">
+                        <div class="agent-loading">
+                            <div class="loading-spinner"></div>
+                            <span>Loading agents...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Safety & Privacy</h3>
+                    <div class="safety-info">
+                        <div class="safety-item">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>HIPAA Compliant</span>
+                        </div>
+                        <div class="safety-item">
+                            <i class="fas fa-lock"></i>
+                            <span>Secure & Private</span>
+                        </div>
+                        <p class="safety-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            This is not a substitute for professional medical care.
+                        </p>
+                        <p class="safety-emergency">
+                            <i class="fas fa-ambulance"></i>
+                            For emergencies, call 911 immediately.
+                        </p>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="welcome-message">
+                        <div class="welcome-icon">
+                            <i class="fas fa-stethoscope"></i>
+                        </div>
+                        <h2>Welcome to AgentMed</h2>
+                        <p>I'm your intelligent healthcare assistant powered by verified medical sources (FDA, PubMed, NHS, CDC).</p>
+                        <div class="welcome-features">
+                            <div class="feature-card">
+                                <i class="fas fa-search"></i>
+                                <h4>Symptom Analysis</h4>
+                                <p>Get medically-grounded guidance on your symptoms</p>
+                            </div>
+                            <div class="feature-card">
+                                <i class="fas fa-pills"></i>
+                                <h4>Drug Information</h4>
+                                <p>Comprehensive medication info and interactions</p>
+                            </div>
+                            <div class="feature-card">
+                                <i class="fas fa-calendar-check"></i>
+                                <h4>Appointment Management</h4>
+                                <p>Book, reschedule, or cancel appointments</p>
+                            </div>
+                            <div class="feature-card">
+                                <i class="fas fa-file-medical"></i>
+                                <h4>Document Analysis</h4>
+                                <p>Understand your medical reports and PDFs</p>
+                            </div>
+                        </div>
+                        <p class="welcome-note">Ask me anything about your health concerns!</p>
+                    </div>
+                </div>
+
+                <!-- Emergency Banner -->
+                <div class="emergency-banner" id="emergencyBanner" style="display: none;">
+                    <div class="emergency-content">
+                        <span class="emergency-icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </span>
+                        <span class="emergency-text" id="emergencyText"></span>
+                        <button class="emergency-close" id="emergencyClose">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="input-area">
+                    <div class="input-toolbar">
+                        <button class="toolbar-btn" id="uploadPdfBtn" title="Upload PDF">
+                            <i class="fas fa-file-pdf"></i>
+                        </button>
+                        <button class="toolbar-btn" id="voiceInputBtn" title="Voice Input">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <div class="file-upload-container">
+                            <input type="file" id="pdfFileInput" accept=".pdf" style="display: none;">
+                        </div>
+                    </div>
+                    <div class="input-container">
+                        <textarea 
+                            id="messageInput" 
+                            class="message-input" 
+                            placeholder="Type your message here... (e.g., 'I have a fever and headache')"
+                            rows="1"
+                        ></textarea>
+                        <button id="sendButton" class="send-button" title="Send message">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="input-hints">
+                        <span class="hint">
+                            <i class="fas fa-lightbulb"></i>
+                            Press Enter to send, Shift+Enter for new line
+                        </span>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Agent Selection Modal -->
+    <div class="modal-overlay" id="agentModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select an Agent</h3>
+                <button class="modal-close" id="closeAgentModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="agentModalBody">
+                <!-- Agent cards will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="settingsModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Settings</h3>
+                <button class="modal-close" id="closeSettingsModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="soundEnabled" checked>
+                        <span>Enable sound notifications</span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="autoScroll" checked>
+                        <span>Auto-scroll to new messages</span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <label>
+                        <input type="checkbox" id="showTimestamps" checked>
+                        <span>Show message timestamps</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

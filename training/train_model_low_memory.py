@@ -1,7 +1,6 @@
 """
-Fine-tuning Script for Medical AI Model
-Uses LoRA/QLoRA for efficient training
-Supports: Mistral 7B, Llama 3 8B, Qwen 7B
+Low-Memory Training Script for Medical AI Model
+Optimized for systems with limited GPU RAM (8GB or less)
 """
 import os
 import json
@@ -27,54 +26,50 @@ from datasets import load_dataset
 
 
 @dataclass
-class ModelConfig:
-    """Model configuration"""
-    base_model: str = "mistralai/Mistral-7B-v0.1"  # or "meta-llama/Llama-3-8b" or "Qwen/Qwen-7B"
-    use_qlora: bool = True  # Use QLoRA for 4-bit quantization
+class LowMemoryModelConfig:
+    """Model configuration optimized for low memory"""
+    base_model: str = "mistralai/Mistral-7B-v0.1"
+    use_qlora: bool = False  # Using 8-bit instead of 4-bit QLoRA
     output_dir: str = "training/models/medical_ai_model"
     dataset_path: str = "training/datasets/medical_instruction_dataset_train.jsonl"
     val_dataset_path: str = "training/datasets/medical_instruction_dataset_val.jsonl"
     
-    # LoRA config
-    lora_r: int = 16
-    lora_alpha: int = 32
+    # LoRA config (smaller for memory efficiency)
+    lora_r: int = 8  # Reduced from 16
+    lora_alpha: int = 16  # Reduced from 32
     lora_dropout: float = 0.05
-    target_modules: list = field(default_factory=lambda: ["q_proj", "v_proj", "k_proj", "o_proj"])
+    target_modules: list = field(default_factory=lambda: ["q_proj", "v_proj"])  # Fewer modules
     
-    # Training config (optimized for low-memory systems)
-    num_epochs: int = 3
-    batch_size: int = 1  # Minimum for low memory
-    gradient_accumulation_steps: int = 16  # High accumulation to maintain effective batch size
+    # Training config (ultra-low memory)
+    num_epochs: int = 2  # Reduced epochs
+    batch_size: int = 1  # Minimum batch size
+    gradient_accumulation_steps: int = 16  # High accumulation
     learning_rate: float = 1e-4  # Lower learning rate
-    warmup_steps: int = 50  # Reduced
-    max_seq_length: int = 512  # Much shorter to save memory
-    save_steps: int = 500
-    eval_steps: int = 500
+    warmup_steps: int = 50
+    max_seq_length: int = 512  # Much shorter sequences
+    save_steps: int = 1000  # Save less frequently
+    eval_steps: int = 1000
     logging_steps: int = 50
 
 
-class MedicalModelTrainer:
-    """Trainer for medical AI model"""
+class LowMemoryMedicalModelTrainer:
+    """Trainer optimized for low-memory systems"""
     
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: LowMemoryModelConfig):
         self.config = config
         self.model = None
         self.tokenizer = None
     
     def load_model_and_tokenizer(self):
-        """Load base model and tokenizer"""
+        """Load base model with maximum memory efficiency"""
         print(f"Loading model: {self.config.base_model}")
+        print("[WARNING] Low-memory mode: Using aggressive optimizations")
         
-        # Configure quantization for QLoRA
-        if self.config.use_qlora:
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.bfloat16,
-                bnb_4bit_use_double_quant=True,
-            )
-        else:
-            bnb_config = None
+        # Use 8-bit quantization instead of 4-bit (allows CPU offloading)
+        # 8-bit is less memory efficient but allows CPU offloading
+        bnb_config = BitsAndBytesConfig(
+            load_in_8bit=True,  # Use 8-bit instead of 4-bit for CPU offloading support
+        )
         
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -82,56 +77,39 @@ class MedicalModelTrainer:
             trust_remote_code=True
         )
         
-        # Add padding token if not present
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
-        # Load model with CPU offloading for low-memory systems
-        # Use custom device_map to offload to CPU if needed
-        if self.config.use_qlora:
-            # For QLoRA with limited GPU memory, allow CPU offloading
-            device_map = "auto"
-            # Enable CPU offload for 32-bit modules
-            import os
-            os.environ["BITSANDBYTES_NOWELCOME"] = "1"
-        else:
-            device_map = "auto"
-        
-        # Calculate available GPU memory and set max_memory accordingly
+        # Custom device map for CPU offloading with 8-bit
         max_memory = None
-        if torch.cuda.is_available():
-            try:
-                gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                if gpu_memory_gb < 12:
-                    # Low GPU memory - allow CPU offloading
-                    max_memory = {0: f"{int(gpu_memory_gb * 0.6)}GiB", "cpu": "50GiB"}
-                    print(f"[WARNING] Low GPU memory ({gpu_memory_gb:.1f}GB). Enabling CPU offloading.")
-                else:
-                    max_memory = {0: f"{int(gpu_memory_gb * 0.8)}GiB", "cpu": "30GiB"}
-            except:
-                # Fallback if can't detect
-                max_memory = {0: "8GiB", "cpu": "50GiB"}
-                print("[WARNING] Using conservative memory settings.")
+        device_map = "auto"
         
-        # Load model with memory-efficient settings
+        if torch.cuda.is_available():
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3  # GB
+            if gpu_memory < 12:
+                # Very low GPU memory - use CPU offloading
+                max_memory = {0: f"{int(gpu_memory * 0.6)}GiB", "cpu": "50GiB"}
+                print(f"[WARNING] Low GPU memory detected ({gpu_memory:.1f}GB). Using CPU offloading.")
+        
+        # Load model with 8-bit quantization (allows CPU offloading)
         self.model = AutoModelForCausalLM.from_pretrained(
             self.config.base_model,
             quantization_config=bnb_config,
-            device_map="auto",
+            device_map=device_map,
             trust_remote_code=True,
-            torch_dtype=torch.float16,  # Use float16 for better memory efficiency
+            torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
-            max_memory=max_memory
+            max_memory=max_memory,
+            llm_int8_enable_fp32_cpu_offload=True,  # Enable CPU offloading for 8-bit
         )
         
-        # Prepare for QLoRA training
-        if self.config.use_qlora:
-            self.model = prepare_model_for_kbit_training(self.model)
-            # Enable gradient checkpointing to save memory
+        # 8-bit models don't need prepare_model_for_kbit_training
+        # But we enable gradient checkpointing for memory savings
+        if hasattr(self.model, 'gradient_checkpointing_enable'):
             self.model.gradient_checkpointing_enable()
         
-        # Apply LoRA
+        # Apply LoRA with smaller rank
         lora_config = LoraConfig(
             r=self.config.lora_r,
             lora_alpha=self.config.lora_alpha,
@@ -144,20 +122,16 @@ class MedicalModelTrainer:
         self.model = get_peft_model(self.model, lora_config)
         self.model.print_trainable_parameters()
         
-        print("Model and tokenizer loaded successfully!")
+        print("[SUCCESS] Model loaded with low-memory optimizations!")
     
     def format_prompt(self, instruction: str, input_text: str, output: str) -> str:
         """Format instruction following prompt"""
-        # Mistral format
         if "mistral" in self.config.base_model.lower():
             prompt = f"<s>[INST] {instruction}\n{input_text} [/INST] {output}</s>"
-        # Llama format
         elif "llama" in self.config.base_model.lower():
             prompt = f"<s>[INST] <<SYS>>\nYou are a helpful medical assistant.\n<</SYS>>\n\n{instruction}\n{input_text} [/INST] {output}</s>"
-        # Qwen format
         elif "qwen" in self.config.base_model.lower():
             prompt = f"<|im_start|>system\nYou are a helpful medical assistant.<|im_end|>\n<|im_start|>user\n{instruction}\n{input_text}<|im_end|>\n<|im_start|>assistant\n{output}<|im_end|>"
-        # Default format
         else:
             prompt = f"### Instruction:\n{instruction}\n\n### Input:\n{input_text}\n\n### Response:\n{output}"
         
@@ -169,13 +143,11 @@ class MedicalModelTrainer:
         inputs = examples.get("input", [""] * len(instructions))
         outputs = examples["output"]
         
-        # Format prompts
         prompts = [
             self.format_prompt(inst, inp, out)
             for inst, inp, out in zip(instructions, inputs, outputs)
         ]
         
-        # Tokenize
         model_inputs = self.tokenizer(
             prompts,
             max_length=self.config.max_seq_length,
@@ -183,7 +155,6 @@ class MedicalModelTrainer:
             padding=False,
         )
         
-        # Create labels (same as input_ids for causal LM)
         labels = model_inputs["input_ids"].copy()
         model_inputs["labels"] = labels
         
@@ -193,7 +164,6 @@ class MedicalModelTrainer:
         """Load and preprocess dataset"""
         print("Loading dataset...")
         
-        # Load JSONL files
         def load_jsonl(file_path):
             data = {"instruction": [], "input": [], "output": []}
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -208,12 +178,10 @@ class MedicalModelTrainer:
         train_data = load_jsonl(self.config.dataset_path)
         val_data = load_jsonl(self.config.val_dataset_path)
         
-        # Convert to datasets format
         from datasets import Dataset
         train_dataset = Dataset.from_dict(train_data)
         val_dataset = Dataset.from_dict(val_data)
         
-        # Preprocess
         train_dataset = train_dataset.map(
             self.preprocess_function,
             batched=True,
@@ -232,23 +200,21 @@ class MedicalModelTrainer:
         return train_dataset, val_dataset
     
     def train(self):
-        """Train the model"""
+        """Train the model with low-memory optimizations"""
         print("=" * 60)
-        print("Starting Medical AI Model Training")
+        print("Starting Low-Memory Medical AI Model Training")
+        print("=" * 60)
+        print("[WARNING] Optimized for systems with limited GPU RAM")
         print("=" * 60)
         
-        # Load model
         self.load_model_and_tokenizer()
-        
-        # Load dataset
         train_dataset, val_dataset = self.load_dataset()
         
-        # Training arguments
         training_args = TrainingArguments(
             output_dir=self.config.output_dir,
             num_train_epochs=self.config.num_epochs,
             per_device_train_batch_size=self.config.batch_size,
-            per_device_eval_batch_size=self.config.batch_size,
+            per_device_eval_batch_size=1,
             gradient_accumulation_steps=self.config.gradient_accumulation_steps,
             learning_rate=self.config.learning_rate,
             warmup_steps=self.config.warmup_steps,
@@ -260,19 +226,20 @@ class MedicalModelTrainer:
             load_best_model_at_end=True,
             metric_for_best_model="loss",
             greater_is_better=False,
-            fp16=True,  # Use float16 for memory efficiency
-            bf16=False,
+            fp16=True,  # Use float16 for memory
+            gradient_checkpointing=True,  # Critical!
+            dataloader_pin_memory=False,
+            dataloader_num_workers=0,  # Reduce workers
+            optim="adamw_torch",
             report_to="tensorboard",
-            run_name="medical_ai_training",
+            run_name="medical_ai_training_low_mem",
         )
         
-        # Data collator
         data_collator = DataCollatorForLanguageModeling(
             tokenizer=self.tokenizer,
             mlm=False,
         )
         
-        # Trainer
         trainer = Trainer(
             model=self.model,
             args=training_args,
@@ -281,11 +248,10 @@ class MedicalModelTrainer:
             data_collator=data_collator,
         )
         
-        # Train
-        print("\nStarting training...")
+        print("\nStarting training with low-memory optimizations...")
+        print("This may be slower but will work on limited GPU memory.")
         trainer.train()
         
-        # Save final model
         print("\nSaving final model...")
         trainer.save_model()
         self.tokenizer.save_pretrained(self.config.output_dir)
@@ -300,36 +266,26 @@ def main():
     """Main training function"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="Train Medical AI Model")
+    parser = argparse.ArgumentParser(description="Train Medical AI Model (Low Memory)")
     parser.add_argument("--model", type=str, default="mistralai/Mistral-7B-v0.1",
-                       choices=["mistralai/Mistral-7B-v0.1", "meta-llama/Llama-3-8b", "Qwen/Qwen-7B"],
                        help="Base model to fine-tune")
-    parser.add_argument("--use-qlora", action="store_true", default=True,
-                       help="Use QLoRA (4-bit quantization)")
-    parser.add_argument("--epochs", type=int, default=3,
+    parser.add_argument("--epochs", type=int, default=2,
                        help="Number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=4,
-                       help="Batch size")
-    parser.add_argument("--learning-rate", type=float, default=2e-4,
-                       help="Learning rate")
+    parser.add_argument("--seq-length", type=int, default=512,
+                       help="Maximum sequence length")
     
     args = parser.parse_args()
     
-    # Create config
-    config = ModelConfig(
+    config = LowMemoryModelConfig(
         base_model=args.model,
-        use_qlora=args.use_qlora,
         num_epochs=args.epochs,
-        batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
+        max_seq_length=args.seq_length,
     )
     
-    # Train
-    trainer = MedicalModelTrainer(config)
+    trainer = LowMemoryMedicalModelTrainer(config)
     trainer.train()
 
 
 if __name__ == "__main__":
     main()
-
 
